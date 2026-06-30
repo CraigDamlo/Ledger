@@ -1,0 +1,881 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ledger — Sight-Reading Trainer</title>
+<meta name="description" content="A pocket sight-reading drill: read the note on the staff, find it on the keyboard.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #15211c;
+    --bg-elevated: #1c2b25;
+    --paper: #f1ead9;
+    --paper-line: #cbbfa1;
+    --ink: #2a2018;
+    --brass: #c9a227;
+    --brass-soft: #e8c766;
+    --correct: #4f7a5c;
+    --wrong: #b0473e;
+    --text-hi: #f3efe3;
+    --text-lo: #9badA1;
+    --text-lo2: #8a9c91;
+    --key-white: #f5f1e6;
+    --key-white-shadow: #b9ad8e;
+    --key-black: #20140c;
+    --radius: 14px;
+    --display: 'Fraunces', Georgia, serif;
+    --body: 'Inter', system-ui, -apple-system, sans-serif;
+    --mono: 'JetBrains Mono', 'SFMono-Regular', Menlo, monospace;
+    --clef-font: 'Apple Symbols', 'Segoe UI Symbol', 'Noto Sans Symbols', serif;
+  }
+
+  *{ box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body{ height: 100%; }
+  body{
+    margin:0;
+    background: radial-gradient(120% 140% at 50% -10%, #1d2e26 0%, var(--bg) 55%, #0f1813 100%);
+    color: var(--text-hi);
+    font-family: var(--body);
+    min-height: 100vh;
+    display:flex;
+    flex-direction:column;
+    overscroll-behavior-y: contain;
+  }
+
+  button{ font-family: inherit; }
+
+  /* ---------- header ---------- */
+  header{
+    padding: 18px 18px 8px;
+    display:flex;
+    align-items:flex-start;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .brand .eyebrow{
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: .18em;
+    color: var(--brass-soft);
+    text-transform: uppercase;
+  }
+  .brand h1{
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 30px;
+    margin: 2px 0 0;
+    letter-spacing: .01em;
+  }
+  .gear-btn{
+    background: var(--bg-elevated);
+    border: 1px solid #314238;
+    color: var(--text-hi);
+    width: 42px; height: 42px;
+    border-radius: 50%;
+    display:flex; align-items:center; justify-content:center;
+    cursor:pointer;
+    flex: 0 0 auto;
+    transition: transform .25s ease, background .2s ease;
+  }
+  .gear-btn:hover{ background:#243a30; }
+  .gear-btn svg{ width:20px; height:20px; }
+  .gear-btn.open{ transform: rotate(35deg); }
+
+  /* ---------- settings panel ---------- */
+  .panel{
+    overflow: hidden;
+    max-height: 0;
+    transition: max-height .35s ease;
+    padding: 0 18px;
+  }
+  .panel.open{ max-height: 480px; }
+  .panel-inner{
+    background: var(--bg-elevated);
+    border: 1px solid #314238;
+    border-radius: var(--radius);
+    padding: 16px;
+    margin-bottom: 14px;
+  }
+  .panel-label{
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--text-lo);
+    margin: 0 0 10px;
+  }
+  .level-grid{
+    display:grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  .level-pill{
+    background: #16221c;
+    border: 1px solid #324339;
+    color: var(--text-hi);
+    border-radius: 10px;
+    padding: 10px 10px;
+    font-size: 13px;
+    text-align: left;
+    cursor: pointer;
+    line-height: 1.25;
+    transition: border-color .2s ease, background .2s ease;
+  }
+  .level-pill span{ display:block; color: var(--text-lo2); font-size: 11px; margin-top: 2px; }
+  .level-pill.active{
+    border-color: var(--brass);
+    background: linear-gradient(180deg, #233527, #1a281f);
+    box-shadow: 0 0 0 1px rgba(201,162,39,.25) inset;
+  }
+  .level-pill:focus-visible, .gear-btn:focus-visible, .key:focus-visible, .toggle-row:focus-within{
+    outline: 2px solid var(--brass-soft);
+    outline-offset: 2px;
+  }
+
+  .toggle-row{
+    display:flex;
+    align-items:center;
+    justify-content: space-between;
+    border-top: 1px solid #2a3a32;
+    padding-top: 12px;
+  }
+  .toggle-row p{ margin:0; font-size: 13px; color: var(--text-hi); }
+  .toggle-row small{ display:block; color: var(--text-lo2); font-size: 11.5px; margin-top: 2px; }
+  .switch{
+    position: relative;
+    width: 42px; height: 24px;
+    border-radius: 999px;
+    background: #2c3c33;
+    border: 1px solid #3c4f43;
+    cursor: pointer;
+    flex: 0 0 auto;
+  }
+  .switch::after{
+    content:'';
+    position:absolute; top:2px; left:2px;
+    width:18px; height:18px; border-radius:50%;
+    background: var(--text-lo);
+    transition: transform .2s ease, background .2s ease;
+  }
+  .switch.on{ background:#2f4a3a; border-color: var(--brass); }
+  .switch.on::after{ transform: translateX(18px); background: var(--brass-soft); }
+
+  .reset-btn{
+    margin-top: 14px;
+    width: 100%;
+    background: transparent;
+    border: 1px solid #3c4f43;
+    color: var(--text-lo);
+    border-radius: 10px;
+    padding: 9px;
+    font-size: 12.5px;
+    cursor: pointer;
+  }
+  .reset-btn:hover{ color: var(--wrong); border-color: var(--wrong); }
+
+  /* ---------- main ---------- */
+  main{
+    flex: 1;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    padding: 4px 14px 10px;
+    gap: 14px;
+    min-height: 0;
+  }
+
+  .stats-row{
+    display:flex;
+    gap: 22px;
+    font-family: var(--mono);
+  }
+  .stat{ text-align:center; }
+  .stat .v{ font-size: 20px; font-weight: 600; color: var(--brass-soft); }
+  .stat .l{ font-size: 9.5px; letter-spacing:.12em; text-transform:uppercase; color: var(--text-lo); margin-top:1px; }
+
+  .staff-card{
+    background: var(--paper);
+    border-radius: var(--radius);
+    width: 100%;
+    max-width: 480px;
+    padding: 6px 4px 14px;
+    box-shadow: 0 18px 40px -16px rgba(0,0,0,.55), 0 0 0 1px rgba(0,0,0,.08);
+    position: relative;
+  }
+  .staff-card::before{
+    content:'';
+    position:absolute; inset:0;
+    border-radius: var(--radius);
+    background-image: radial-gradient(rgba(42,32,24,.05) 1px, transparent 1px);
+    background-size: 4px 4px;
+    pointer-events:none;
+    opacity:.5;
+  }
+  .clef-tag{
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: #8a7a5c;
+    padding: 8px 10px 0;
+  }
+  svg.staff{ width: 100%; height: auto; display:block; }
+
+  .feedback{
+    min-height: 22px;
+    font-size: 14.5px;
+    text-align:center;
+    font-weight: 500;
+    transition: color .15s ease;
+  }
+  .feedback.correct{ color: var(--correct); }
+  .feedback.wrong{ color: var(--wrong); }
+  .feedback.idle{ color: var(--text-lo); }
+
+  /* ---------- keyboard ---------- */
+  .keyboard-wrap{
+    width: 100%;
+    margin-top: auto;
+    padding-top: 4px;
+  }
+  .keyboard-hint{
+    text-align:center;
+    font-size: 11px;
+    color: var(--text-lo2);
+    margin: 0 0 8px;
+    font-family: var(--mono);
+    letter-spacing: .04em;
+  }
+  .keyboard-scroll{
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 6px;
+    scroll-snap-type: x proximity;
+  }
+  .keyboard{
+    position: relative;
+    display:flex;
+    height: 156px;
+    width: max-content;
+    margin: 0 auto;
+    padding: 0 4px;
+  }
+  .white-key{
+    flex: 0 0 auto;
+    width: 44px;
+    height: 152px;
+    background: linear-gradient(180deg, var(--key-white), #e9e2cf);
+    border: 1px solid #b9ad8e;
+    border-top: none;
+    border-radius: 0 0 7px 7px;
+    box-shadow: inset 0 -10px 14px -10px rgba(0,0,0,.25);
+    display:flex;
+    flex-direction: column;
+    align-items:center;
+    justify-content:flex-end;
+    padding-bottom: 8px;
+    cursor: pointer;
+    position: relative;
+    z-index: 1;
+    transition: background .08s ease, transform .08s ease;
+    scroll-snap-align: start;
+  }
+  .white-key:active{ background: #ddd2b4; }
+  .white-key .lbl{
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: #7a6c4f;
+    pointer-events:none;
+    opacity: 0;
+    transition: opacity .15s ease;
+  }
+  .keyboard.show-labels .white-key .lbl{ opacity: 1; }
+
+  .white-key.correct-flash{ background: var(--correct) !important; box-shadow: inset 0 -10px 14px -10px rgba(0,0,0,.35); }
+  .white-key.correct-flash .lbl{ color: #eafff0; opacity: 1; }
+  .white-key.wrong-flash{ background: var(--wrong) !important; box-shadow: inset 0 -10px 14px -10px rgba(0,0,0,.35); }
+  .white-key.wrong-flash .lbl{ color: #ffeceb; opacity: 1; }
+
+  .white-key.middle-c{ border-bottom: 4px solid var(--brass); }
+  .white-key.middle-c .lbl{
+    opacity: 1 !important;
+    color: var(--brass);
+    font-weight: 600;
+  }
+  .white-key .mc-dot{
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--brass);
+    margin-bottom: 4px;
+  }
+  .black-key{
+    position:absolute;
+    top:0;
+    width: 26px;
+    height: 92px;
+    background: linear-gradient(180deg, #2c1d12, var(--key-black));
+    border-radius: 0 0 5px 5px;
+    box-shadow: 0 4px 6px rgba(0,0,0,.5);
+    z-index: 2;
+    cursor: pointer;
+    display:flex;
+    align-items:flex-end;
+    justify-content:center;
+    padding-bottom: 6px;
+  }
+  .black-key:active{ background: #3a2818; }
+  .black-key .lbl{
+    font-family: var(--mono);
+    font-size: 7.5px;
+    line-height: 1.25;
+    text-align:center;
+    color: #cabf9c;
+    pointer-events:none;
+    opacity: 0;
+    transition: opacity .15s ease;
+  }
+  .keyboard.show-labels .black-key .lbl{ opacity: 1; }
+  .black-key.correct-flash{ background: var(--correct) !important; }
+  .black-key.correct-flash .lbl{ color: #eafff0; opacity: 1; }
+  .black-key.wrong-flash{ background: var(--wrong) !important; }
+  .black-key.wrong-flash .lbl{ color: #ffeceb; opacity: 1; }
+
+  footer{
+    text-align:center;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: #4d5f53;
+    padding: 6px 0 14px;
+    letter-spacing: .04em;
+  }
+  footer a{ color: #6f8474; }
+
+  @media (prefers-reduced-motion: reduce){
+    *{ transition: none !important; animation: none !important; }
+  }
+
+  @keyframes drop-in{
+    from{ transform: translateY(-10px); opacity:0; }
+    to{ transform: translateY(0); opacity:1; }
+  }
+  .note-group{ animation: drop-in .28s cubic-bezier(.22,1,.36,1); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <p class="eyebrow">Sight-reading drill</p>
+    <h1>Ledger</h1>
+  </div>
+  <button class="gear-btn" id="gearBtn" aria-label="Settings" aria-expanded="false">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="3"></circle>
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+    </svg>
+  </button>
+</header>
+
+<div class="panel" id="panel">
+  <div class="panel-inner">
+    <p class="panel-label">Choose a drill</p>
+    <div class="level-grid" id="levelGrid"></div>
+
+    <div class="toggle-row">
+      <div>
+        <p>Sharps &amp; flats</p>
+        <small>Mixes in accidentals — tap the matching black key.</small>
+      </div>
+      <div class="switch" id="accidentalsSwitch" role="switch" aria-checked="true" tabindex="0"></div>
+    </div>
+
+    <div class="toggle-row">
+      <div>
+        <p>Show key letters</p>
+        <small>Training wheels — turn off once you can find notes by feel.</small>
+      </div>
+      <div class="switch" id="labelsSwitch" role="switch" aria-checked="true" tabindex="0"></div>
+    </div>
+
+    <button class="reset-btn" id="resetBtn">Reset stats</button>
+  </div>
+</div>
+
+<main>
+  <div class="stats-row">
+    <div class="stat"><div class="v" id="statStreak">0</div><div class="l">Streak</div></div>
+    <div class="stat"><div class="v" id="statBest">0</div><div class="l">Best</div></div>
+    <div class="stat"><div class="v" id="statAcc">—</div><div class="l">Accuracy</div></div>
+  </div>
+
+  <div class="staff-card">
+    <p class="clef-tag" id="clefTag">treble clef</p>
+    <svg class="staff" id="staffSvg" viewBox="0 0 320 170" xmlns="http://www.w3.org/2000/svg"></svg>
+  </div>
+
+  <p class="feedback idle" id="feedback">Tap the key that matches the note.</p>
+
+  <div class="keyboard-wrap">
+    <p class="keyboard-hint">Centered on middle C — marked in gold below</p>
+    <div class="keyboard-scroll">
+      <div class="keyboard show-labels" id="keyboard"></div>
+    </div>
+  </div>
+</main>
+
+<footer>built for thumb-practice on the piano bench &amp; the bus</footer>
+
+<script>
+(function(){
+  "use strict";
+
+  // ---------- music theory helpers ----------
+  var LETTERS = ['C','D','E','F','G','A','B'];
+
+  function noteStep(letter, octave){ return LETTERS.indexOf(letter) + 7*octave; }
+
+  function stepToNote(step){
+    var letterIdx = ((step % 7) + 7) % 7;
+    var octave = (step - letterIdx) / 7;
+    return { letter: LETTERS[letterIdx], octave: octave, step: step };
+  }
+
+  var CLEF = {
+    treble: { bottomStep: noteStep('E', 4), glyph: '\uD834\uDD1E', glyphY: 118, glyphX: 26, glyphSize: 92 },
+    bass:   { bottomStep: noteStep('G', 2), glyph: '\uD834\uDD22', glyphY: 100, glyphX: 24, glyphSize: 54 }
+  };
+
+  var LEVELS = [
+    { id:'treble-staff',  label:'Treble', sub:'In the staff',     clefs:['treble'], diffMin:0,  diffMax:8  },
+    { id:'treble-ledger', label:'Treble', sub:'+ Ledger lines',   clefs:['treble'], diffMin:-4, diffMax:12 },
+    { id:'bass-staff',    label:'Bass',   sub:'In the staff',     clefs:['bass'],   diffMin:0,  diffMax:8  },
+    { id:'bass-ledger',   label:'Bass',   sub:'+ Ledger lines',   clefs:['bass'],   diffMin:-4, diffMax:12 },
+    { id:'mixed',         label:'Both clefs', sub:'Full range',   clefs:['treble','bass'], diffMin:-4, diffMax:12 }
+  ];
+
+  var KB_HARD_MIN = noteStep('C', 1); // absolute outer safety bound, never displayed in full
+  var KB_HARD_MAX = noteStep('C', 7);
+  var KEY_PADDING = 2; // extra natural keys shown on each side of a level's note range
+  var MIDDLE_C = noteStep('C', 4);
+
+  // letters that have a black key after them (sharp lives there) / before them (flat lives there)
+  var SHARP_LETTERS = { C:1, D:1, F:1, G:1, A:1 };
+  var FLAT_LETTERS  = { D:1, E:1, G:1, A:1, B:1 };
+  var ACCIDENTAL_PROB = 0.35;
+
+  function targetStepFor(note){
+    if(!note.accidental) return note.step;
+    return note.accidental === '#' ? note.step : note.step - 1;
+  }
+
+  function noteName(note){
+    var n = stepToNote(note.step);
+    var sym = note.accidental === '#' ? '\u266F' : (note.accidental === 'b' ? '\u266D' : '');
+    return n.letter + sym + n.octave;
+  }
+
+  function blackKeyName(targetStep){
+    var lo = stepToNote(targetStep), hi = stepToNote(targetStep + 1);
+    return lo.letter + '\u266F / ' + hi.letter + '\u266D';
+  }
+
+  function rangeForLevel(level){
+    var min = Infinity, max = -Infinity;
+    level.clefs.forEach(function(clef){
+      min = Math.min(min, CLEF[clef].bottomStep + level.diffMin);
+      max = Math.max(max, CLEF[clef].bottomStep + level.diffMax);
+    });
+    min -= KEY_PADDING;
+    max += KEY_PADDING;
+    min = Math.max(min, KB_HARD_MIN);
+    max = Math.min(max, KB_HARD_MAX);
+    return { min: min, max: max };
+  }
+
+  // ---------- state ----------
+  var state = {
+    levelId: 'treble-staff',
+    showLabels: true,
+    includeAccidentals: true,
+    current: null,        // { clef, step, accidental }
+    awaitingAnswer: true,
+    stats: { streak:0, best:0, correct:0, total:0 }
+  };
+
+  function loadState(){
+    try{
+      var saved = JSON.parse(localStorage.getItem('ledger-state') || '{}');
+      if(saved.levelId) state.levelId = saved.levelId;
+      if(typeof saved.showLabels === 'boolean') state.showLabels = saved.showLabels;
+      if(typeof saved.includeAccidentals === 'boolean') state.includeAccidentals = saved.includeAccidentals;
+      if(saved.stats) state.stats = saved.stats;
+    }catch(e){}
+  }
+  function saveState(){
+    try{
+      localStorage.setItem('ledger-state', JSON.stringify({
+        levelId: state.levelId, showLabels: state.showLabels,
+        includeAccidentals: state.includeAccidentals, stats: state.stats
+      }));
+    }catch(e){}
+  }
+
+  function currentLevel(){
+    for(var i=0;i<LEVELS.length;i++) if(LEVELS[i].id === state.levelId) return LEVELS[i];
+    return LEVELS[0];
+  }
+
+  function randInt(min, max){ return Math.floor(Math.random() * (max - min + 1)) + min; }
+
+  function generateNote(){
+    var level = currentLevel();
+    var kbRange = rangeForLevel(level);
+    var clef, step, tries = 0;
+    do{
+      clef = level.clefs[randInt(0, level.clefs.length - 1)];
+      var diff = randInt(level.diffMin, level.diffMax);
+      step = CLEF[clef].bottomStep + diff;
+      tries++;
+    } while((step < kbRange.min || step > kbRange.max) && tries < 30);
+    step = Math.max(kbRange.min, Math.min(kbRange.max, step));
+
+    var accidental = pickAccidental(step, kbRange);
+
+    // avoid repeating the exact same note twice in a row when possible
+    if(state.current && state.current.step === step && state.current.clef === clef &&
+       state.current.accidental === accidental && tries < 25){
+      return generateNote();
+    }
+    return { clef: clef, step: step, accidental: accidental };
+  }
+
+  function pickAccidental(step, range){
+    if(!state.includeAccidentals) return null;
+    if(Math.random() > ACCIDENTAL_PROB) return null;
+    var n = stepToNote(step);
+    var choices = [];
+    if(SHARP_LETTERS[n.letter]) choices.push('#');
+    if(FLAT_LETTERS[n.letter]) choices.push('b');
+    if(!choices.length) return null;
+    var acc = choices[randInt(0, choices.length - 1)];
+    var target = (acc === '#') ? step : step - 1;
+    if(target < range.min || target >= range.max) return null; // keep the matching black key on-screen
+    return acc;
+  }
+
+  // ---------- staff rendering ----------
+  var BOTTOM_LINE_Y = 110;
+  var HALF_SPACE = 7;
+  var STAFF_LEFT = 70;
+  var STAFF_RIGHT = 300;
+  var NOTE_X = 215;
+
+  function diffForStep(clef, step){ return step - CLEF[clef].bottomStep; }
+
+  function ledgerDiffs(diff){
+    var out = [];
+    if(diff < 0){
+      var end = (diff % 2 === 0) ? diff : diff + 1;
+      for(var d = -2; d >= end; d -= 2) out.push(d);
+    } else if(diff > 8){
+      var end2 = (diff % 2 === 0) ? diff : diff - 1;
+      for(var d2 = 10; d2 <= end2; d2 += 2) out.push(d2);
+    }
+    return out;
+  }
+
+  function yForDiff(diff){ return BOTTOM_LINE_Y - diff * HALF_SPACE; }
+
+  var svgNS = "http://www.w3.org/2000/svg";
+  function svgEl(tag, attrs){
+    var el = document.createElementNS(svgNS, tag);
+    for(var k in attrs) el.setAttribute(k, attrs[k]);
+    return el;
+  }
+
+  function renderStaff(note){
+    var svg = document.getElementById('staffSvg');
+    svg.innerHTML = '';
+
+    // five staff lines
+    for(var i=0;i<5;i++){
+      var y = BOTTOM_LINE_Y - i*2*HALF_SPACE;
+      svg.appendChild(svgEl('line', { x1: STAFF_LEFT, y1:y, x2: STAFF_RIGHT, y2:y, stroke:'var(--ink)', 'stroke-width':1.4, opacity:0.82 }));
+    }
+
+    // clef glyph
+    var clefInfo = CLEF[note.clef];
+    var clefText = svgEl('text', {
+      x: clefInfo.glyphX, y: clefInfo.glyphY, 'font-size': clefInfo.glyphSize,
+      'font-family':'var(--clef-font)', fill:'var(--ink)'
+    });
+    clefText.textContent = clefInfo.glyph;
+    svg.appendChild(clefText);
+
+    document.getElementById('clefTag').textContent = note.clef + ' clef';
+
+    // note group
+    var diff = diffForStep(note.clef, note.step);
+    var y = yForDiff(diff);
+    var group = svgEl('g', { class:'note-group' });
+
+    ledgerDiffs(diff).forEach(function(d){
+      var ly = yForDiff(d);
+      group.appendChild(svgEl('line', {
+        x1: NOTE_X - 15, y1: ly, x2: NOTE_X + 15, y2: ly,
+        stroke:'var(--ink)', 'stroke-width':1.4
+      }));
+    });
+
+    var head = svgEl('ellipse', {
+      cx: NOTE_X, cy: y, rx: 9, ry: 6.6,
+      fill:'var(--ink)', transform: 'rotate(-18 ' + NOTE_X + ' ' + y + ')'
+    });
+    group.appendChild(head);
+
+    if(note.accidental){
+      var sign = svgEl('text', {
+        x: NOTE_X - 26, y: y + 6, 'font-size': 22, 'font-family':'var(--body)',
+        fill:'var(--ink)', 'text-anchor':'middle'
+      });
+      sign.textContent = note.accidental === '#' ? '\u266F' : '\u266D';
+      group.appendChild(sign);
+    }
+
+    svg.appendChild(group);
+  }
+
+  // ---------- keyboard rendering ----------
+  var WHITE_W = 44, WHITE_H = 152, BLACK_W = 26, BLACK_H = 92;
+  var BLACK_AFTER = { C:true, D:true, F:true, G:true, A:true };
+
+  function buildKeyboard(range){
+    var kb = document.getElementById('keyboard');
+    kb.innerHTML = '';
+    var whiteIndex = 0;
+    var totalWhite = range.max - range.min + 1;
+    kb.style.width = (totalWhite * WHITE_W + 8) + 'px';
+
+    for(var step = range.min; step <= range.max; step++){
+      var n = stepToNote(step);
+      var key = document.createElement('div');
+      key.className = 'white-key';
+      if(step === MIDDLE_C) key.classList.add('middle-c');
+      key.setAttribute('data-step', step);
+      key.setAttribute('role','button');
+      key.setAttribute('tabindex','0');
+      key.setAttribute('aria-label', n.letter + n.octave + (step === MIDDLE_C ? ' (middle C)' : ''));
+      var lbl = document.createElement('span');
+      lbl.className = 'lbl';
+      lbl.textContent = n.letter;
+      key.appendChild(lbl);
+      if(step === MIDDLE_C){
+        var dot = document.createElement('span');
+        dot.className = 'mc-dot';
+        key.insertBefore(dot, lbl);
+      }
+      kb.appendChild(key);
+
+      if(BLACK_AFTER[n.letter] && step < range.max){
+        var bk = document.createElement('div');
+        bk.className = 'black-key';
+        bk.setAttribute('data-target', step);
+        bk.setAttribute('role','button');
+        bk.setAttribute('tabindex','0');
+        bk.setAttribute('aria-label', blackKeyName(step));
+        bk.style.left = ((whiteIndex+1) * WHITE_W - BLACK_W/2) + 'px';
+        var bLbl = document.createElement('span');
+        bLbl.className = 'lbl';
+        var hi = stepToNote(step + 1);
+        bLbl.innerHTML = n.letter + '\u266F<br>' + hi.letter + '\u266D';
+        bk.appendChild(bLbl);
+        kb.appendChild(bk);
+      }
+      whiteIndex++;
+    }
+  }
+
+  function centerKeyboard(range){
+    var target = (MIDDLE_C >= range.min && MIDDLE_C <= range.max)
+      ? MIDDLE_C
+      : Math.round((range.min + range.max) / 2);
+    var scrollEl = document.querySelector('.keyboard-scroll');
+    var keyEl = document.querySelector('.white-key[data-step="' + target + '"]');
+    if(!scrollEl || !keyEl) return;
+    requestAnimationFrame(function(){
+      var targetLeft = keyEl.offsetLeft - (scrollEl.clientWidth / 2) + (WHITE_W / 2);
+      scrollEl.scrollLeft = Math.max(0, targetLeft);
+    });
+  }
+
+  function rebuildKeyboardForLevel(){
+    var range = rangeForLevel(currentLevel());
+    buildKeyboard(range);
+    document.getElementById('keyboard').classList.toggle('show-labels', state.showLabels);
+    centerKeyboard(range);
+  }
+
+  function clearKeyFlashes(){
+    var keys = document.querySelectorAll('.white-key, .black-key');
+    keys.forEach(function(k){ k.classList.remove('correct-flash','wrong-flash'); });
+  }
+
+  // ---------- game flow ----------
+  function nextRound(){
+    clearKeyFlashes();
+    state.current = generateNote();
+    state.awaitingAnswer = true;
+    renderStaff(state.current);
+    var fb = document.getElementById('feedback');
+    fb.textContent = 'Tap the key that matches the note.';
+    fb.className = 'feedback idle';
+  }
+
+  function updateStatsDisplay(){
+    document.getElementById('statStreak').textContent = state.stats.streak;
+    document.getElementById('statBest').textContent = state.stats.best;
+    var acc = state.stats.total ? Math.round(100 * state.stats.correct / state.stats.total) + '%' : '\u2014';
+    document.getElementById('statAcc').textContent = acc;
+  }
+
+  function handleAnswer(playedTarget, isBlack, keyEl){
+    if(!state.awaitingAnswer) return;
+    state.awaitingAnswer = false;
+
+    var correctTarget = targetStepFor(state.current);
+    var correctIsBlack = !!state.current.accidental;
+    var correctLabel = noteName(state.current);
+    var fb = document.getElementById('feedback');
+
+    if(playedTarget === correctTarget && isBlack === correctIsBlack){
+      state.stats.streak++;
+      state.stats.best = Math.max(state.stats.best, state.stats.streak);
+      state.stats.correct++;
+      state.stats.total++;
+      keyEl.classList.add('correct-flash');
+      fb.textContent = '\u2713 Correct \u2014 that was ' + correctLabel + '.';
+      fb.className = 'feedback correct';
+    } else {
+      state.stats.streak = 0;
+      state.stats.total++;
+      keyEl.classList.add('wrong-flash');
+      var playedLabel = isBlack ? blackKeyName(playedTarget) : (stepToNote(playedTarget).letter + stepToNote(playedTarget).octave);
+      var correctSelector = correctIsBlack
+        ? '.black-key[data-target="' + correctTarget + '"]'
+        : '.white-key[data-step="' + correctTarget + '"]';
+      var correctKey = document.querySelector(correctSelector);
+      if(correctKey) correctKey.classList.add('correct-flash');
+      fb.textContent = '\u2717 That was ' + correctLabel + ' \u2014 you played ' + playedLabel + '.';
+      fb.className = 'feedback wrong';
+    }
+
+    updateStatsDisplay();
+    saveState();
+    var wasCorrect = (playedTarget === correctTarget && isBlack === correctIsBlack);
+    var delay = wasCorrect ? 1300 : 2800;
+    setTimeout(nextRound, delay);
+  }
+
+  // ---------- UI wiring ----------
+  function buildLevelGrid(){
+    var grid = document.getElementById('levelGrid');
+    grid.innerHTML = '';
+    LEVELS.forEach(function(level){
+      var btn = document.createElement('button');
+      btn.className = 'level-pill' + (level.id === state.levelId ? ' active' : '');
+      btn.innerHTML = level.label + '<span>' + level.sub + '</span>';
+      btn.addEventListener('click', function(){
+        state.levelId = level.id;
+        saveState();
+        Array.prototype.forEach.call(grid.children, function(c){ c.classList.remove('active'); });
+        btn.classList.add('active');
+        rebuildKeyboardForLevel();
+        nextRound();
+      });
+      grid.appendChild(btn);
+    });
+  }
+
+  function setLabelsSwitch(on){
+    state.showLabels = on;
+    var sw = document.getElementById('labelsSwitch');
+    sw.classList.toggle('on', on);
+    sw.setAttribute('aria-checked', on ? 'true' : 'false');
+    document.getElementById('keyboard').classList.toggle('show-labels', on);
+    saveState();
+  }
+
+  function setAccidentalsSwitch(on){
+    state.includeAccidentals = on;
+    var sw = document.getElementById('accidentalsSwitch');
+    sw.classList.toggle('on', on);
+    sw.setAttribute('aria-checked', on ? 'true' : 'false');
+    saveState();
+  }
+
+  function init(){
+    loadState();
+    buildLevelGrid();
+    rebuildKeyboardForLevel();
+    setLabelsSwitch(state.showLabels);
+    setAccidentalsSwitch(state.includeAccidentals);
+    updateStatsDisplay();
+    nextRound();
+
+    var gearBtn = document.getElementById('gearBtn');
+    var panel = document.getElementById('panel');
+    gearBtn.addEventListener('click', function(){
+      var open = panel.classList.toggle('open');
+      gearBtn.classList.toggle('open', open);
+      gearBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
+
+    var labelsSwitch = document.getElementById('labelsSwitch');
+    labelsSwitch.addEventListener('click', function(){ setLabelsSwitch(!state.showLabels); });
+    labelsSwitch.addEventListener('keydown', function(e){
+      if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); setLabelsSwitch(!state.showLabels); }
+    });
+
+    var accidentalsSwitch = document.getElementById('accidentalsSwitch');
+    accidentalsSwitch.addEventListener('click', function(){ setAccidentalsSwitch(!state.includeAccidentals); nextRound(); });
+    accidentalsSwitch.addEventListener('keydown', function(e){
+      if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); setAccidentalsSwitch(!state.includeAccidentals); nextRound(); }
+    });
+
+    document.getElementById('resetBtn').addEventListener('click', function(){
+      state.stats = { streak:0, best:0, correct:0, total:0 };
+      updateStatsDisplay();
+      saveState();
+    });
+
+    document.getElementById('keyboard').addEventListener('click', function(e){
+      var key = e.target.closest('.white-key');
+      if(key){
+        handleAnswer(parseInt(key.getAttribute('data-step'), 10), false, key);
+        return;
+      }
+      var black = e.target.closest('.black-key');
+      if(black){
+        handleAnswer(parseInt(black.getAttribute('data-target'), 10), true, black);
+      }
+    });
+
+    document.getElementById('keyboard').addEventListener('keydown', function(e){
+      if(e.key !== 'Enter' && e.key !== ' ') return;
+      var key = e.target.closest('.white-key');
+      if(key){ e.preventDefault(); handleAnswer(parseInt(key.getAttribute('data-step'),10), false, key); return; }
+      var black = e.target.closest('.black-key');
+      if(black){ e.preventDefault(); handleAnswer(parseInt(black.getAttribute('data-target'),10), true, black); }
+    });
+  }
+
+  document.addEventListener('DOMContentLoaded', init);
+})();
+</script>
+</body>
+</html>
