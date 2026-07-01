@@ -91,7 +91,7 @@
     transition: max-height .35s ease;
     padding: 0 18px;
   }
-  .panel.open{ max-height: 480px; }
+  .panel.open{ max-height: min(1600px, 75vh); overflow-y: auto; overflow-x: hidden; }
   .panel-inner{
     background: var(--bg-elevated);
     border: 1px solid #314238;
@@ -169,10 +169,10 @@
     max-height: 0;
     transition: max-height .3s ease;
   }
-  .ramp-options.open{ max-height: 300px; }
+  .ramp-options.open{ max-height: 380px; }
   .ramp-pills{
     display:grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr;
     gap: 8px;
     padding-top: 10px;
     padding-bottom: 4px;
@@ -251,7 +251,7 @@
     font-family: var(--mono);
   }
   .stat{ text-align:center; }
-  .stat .v{ font-size: 20px; font-weight: 600; color: var(--brass-soft); white-space:nowrap; }
+  .stat .v{ font-size: 20px; line-height: 24px; height: 24px; font-weight: 600; color: var(--brass-soft); white-space:nowrap; display:block; }
   .stat .l{ font-size: 9.5px; letter-spacing:.12em; text-transform:uppercase; color: var(--text-lo); margin-top:1px; }
   #statPhrase{ font-size: 15px; }
 
@@ -477,6 +477,7 @@
       <div class="ramp-pills">
         <button class="ramp-pill" data-mode="streak">Streak-based<span>Every N in a row bumps it up</span></button>
         <button class="ramp-pill" data-mode="fixed">Fixed thresholds<span>Set your own per-level counts</span></button>
+        <button class="ramp-pill" data-mode="locked">Fixed count<span>Always N notes \u2014 no ramping</span></button>
       </div>
 
       <div class="ramp-config" id="streakConfig">
@@ -488,6 +489,11 @@
         <label for="fixedInput">Correct in a row needed per step, comma-separated</label>
         <input type="text" id="fixedInput" placeholder="3, 5, 8, 10">
         <small>1st number = notes needed to go 1→2 notes, 2nd = 2→3, and so on.</small>
+      </div>
+
+      <div class="ramp-config" id="lockedConfig">
+        <label for="lockedInput">Notes per round</label>
+        <input type="number" id="lockedInput" min="1" max="5" step="1" value="2">
       </div>
     </div>
 
@@ -546,7 +552,7 @@
         tap to hear
       </span>
     </p>
-    <svg class="staff" id="staffSvg" viewBox="0 0 320 190" xmlns="http://www.w3.org/2000/svg"></svg>
+    <svg class="staff" id="staffSvg" viewBox="0 0 360 190" xmlns="http://www.w3.org/2000/svg"></svg>
   </div>
 
   <p class="feedback idle" id="feedback">Tap the key that matches the note.</p>
@@ -691,10 +697,11 @@
     soundOn: true,
     playOnAppear: false,
     progressiveEnabled: true,
-    rampMode: 'streak',            // 'streak' | 'fixed'
+    rampMode: 'streak',            // 'streak' | 'fixed' | 'locked'
     streakPerLevel: 5,             // used when rampMode === 'streak'
     fixedThresholds: DEFAULT_FIXED_THRESHOLDS.slice(), // used when rampMode === 'fixed'
-    phraseNoteCount: 1,            // current number of notes shown per round
+    fixedNoteCount: 2,             // used when rampMode === 'locked' (no ramping, always this many notes)
+    phraseNoteCount: 1,            // current number of notes shown per round (streak/fixed modes only)
     phraseStreak: 0,               // consecutive correct rounds at phraseNoteCount
     phrase: null,                  // { clef, notes: [{step, accidental}, ...] }
     phraseAnswerIndex: 0,
@@ -712,9 +719,10 @@
       if(typeof saved.soundOn === 'boolean') state.soundOn = saved.soundOn;
       if(typeof saved.playOnAppear === 'boolean') state.playOnAppear = saved.playOnAppear;
       if(typeof saved.progressiveEnabled === 'boolean') state.progressiveEnabled = saved.progressiveEnabled;
-      if(saved.rampMode === 'streak' || saved.rampMode === 'fixed') state.rampMode = saved.rampMode;
+      if(saved.rampMode === 'streak' || saved.rampMode === 'fixed' || saved.rampMode === 'locked') state.rampMode = saved.rampMode;
       if(typeof saved.streakPerLevel === 'number' && saved.streakPerLevel >= 2) state.streakPerLevel = saved.streakPerLevel;
       if(Array.isArray(saved.fixedThresholds) && saved.fixedThresholds.length) state.fixedThresholds = saved.fixedThresholds;
+      if(typeof saved.fixedNoteCount === 'number') state.fixedNoteCount = Math.max(1, Math.min(MAX_PHRASE_NOTES, saved.fixedNoteCount));
       if(typeof saved.phraseNoteCount === 'number') state.phraseNoteCount = Math.max(1, Math.min(MAX_PHRASE_NOTES, saved.phraseNoteCount));
       if(typeof saved.phraseStreak === 'number') state.phraseStreak = saved.phraseStreak;
       if(saved.stats) state.stats = saved.stats;
@@ -727,7 +735,8 @@
         includeAccidentals: state.includeAccidentals, soundOn: state.soundOn,
         playOnAppear: state.playOnAppear, progressiveEnabled: state.progressiveEnabled,
         rampMode: state.rampMode, streakPerLevel: state.streakPerLevel,
-        fixedThresholds: state.fixedThresholds, phraseNoteCount: state.phraseNoteCount,
+        fixedThresholds: state.fixedThresholds, fixedNoteCount: state.fixedNoteCount,
+        phraseNoteCount: state.phraseNoteCount,
         phraseStreak: state.phraseStreak, stats: state.stats
       }));
     }catch(e){}
@@ -787,7 +796,7 @@
   var BOTTOM_LINE_Y = 122;
   var HALF_SPACE = 7;
   var STAFF_LEFT = 70;
-  var STAFF_RIGHT = 300;
+  var STAFF_RIGHT = 350;
 
   function diffForStep(clef, step){ return step - CLEF[clef].bottomStep; }
 
@@ -805,27 +814,27 @@
 
   function yForDiff(diff){ return BOTTOM_LINE_Y - diff * HALF_SPACE; }
 
-  var NOTE_AREA_LEFT = 138, NOTE_AREA_RIGHT = 296, NOTE_X_SINGLE = 215;
+  var NOTE_AREA_LEFT = 140, NOTE_AREA_RIGHT = 280, PREF_NOTE_SPACING = 48;
 
-  function noteXPositions(count){
-    if(count <= 1) return [NOTE_X_SINGLE];
+  function noteLayout(count){
+    var center = (NOTE_AREA_LEFT + NOTE_AREA_RIGHT) / 2;
+    if(count <= 1) return { xs: [center], spacing: PREF_NOTE_SPACING };
+    var available = NOTE_AREA_RIGHT - NOTE_AREA_LEFT;
+    var totalSpan = (count - 1) * PREF_NOTE_SPACING;
+    var spacing = totalSpan <= available ? PREF_NOTE_SPACING : available / (count - 1);
+    var actualSpan = spacing * (count - 1);
+    var start = center - actualSpan / 2;
     var xs = [];
-    for(var i = 0; i < count; i++){
-      xs.push(NOTE_AREA_LEFT + i * (NOTE_AREA_RIGHT - NOTE_AREA_LEFT) / (count - 1));
-    }
-    return xs;
+    for(var i = 0; i < count; i++) xs.push(start + i * spacing);
+    return { xs: xs, spacing: spacing };
   }
 
-  function ledgerHalfWidthFor(count){
-    if(count <= 2) return 15;
-    if(count === 3) return 13;
-    return 11;
+  function ledgerHalfWidthForSpacing(spacing){
+    return Math.max(9, Math.min(15, spacing * 0.32));
   }
 
-  function accidentalOffsetFor(count){
-    if(count <= 2) return 26;
-    if(count === 3) return 20;
-    return 16;
+  function accidentalOffsetForSpacing(spacing){
+    return Math.max(14, Math.min(26, spacing * 0.5));
   }
 
   var svgNS = "http://www.w3.org/2000/svg";
@@ -857,9 +866,10 @@
     document.getElementById('clefTag').textContent = phrase.clef + ' clef';
 
     var count = phrase.notes.length;
-    var xs = noteXPositions(count);
-    var ledgerHalf = ledgerHalfWidthFor(count);
-    var accOffset = accidentalOffsetFor(count);
+    var layout = noteLayout(count);
+    var xs = layout.xs;
+    var ledgerHalf = ledgerHalfWidthForSpacing(layout.spacing);
+    var accOffset = accidentalOffsetForSpacing(layout.spacing);
 
     phrase.notes.forEach(function(note, idx){
       var diff = diffForStep(phrase.clef, note.step);
@@ -869,11 +879,6 @@
       var color = result === true ? 'var(--correct)' : (result === false ? 'var(--wrong)' : 'var(--ink)');
 
       var group = svgEl('g', { class: animate ? 'note-group' : 'note-group-static' });
-
-      if(idx === currentIndex && result == null && count > 1){
-        var ring = svgEl('circle', { cx:x, cy:y, r:13, fill:'none', stroke:'var(--brass)', 'stroke-width':2, opacity:0.6 });
-        group.appendChild(ring);
-      }
 
       ledgerDiffs(diff).forEach(function(d){
         var ly = yForDiff(d);
@@ -991,7 +996,9 @@
   }
 
   function activeNoteCount(){
-    return state.progressiveEnabled ? state.phraseNoteCount : 1;
+    if(!state.progressiveEnabled) return 1;
+    if(state.rampMode === 'locked') return state.fixedNoteCount;
+    return state.phraseNoteCount;
   }
 
   function requiredStreakForCurrentLevel(){
@@ -1005,6 +1012,7 @@
 
   function updatePhraseProgress(allCorrect){
     if(!state.progressiveEnabled) return;
+    if(state.rampMode === 'locked') return; // fixed count, no ramping either direction
     if(allCorrect){
       state.phraseStreak++;
       if(state.phraseNoteCount < MAX_PHRASE_NOTES && state.phraseStreak >= requiredStreakForCurrentLevel()){
@@ -1049,6 +1057,10 @@
     if(!el) return;
     if(!state.progressiveEnabled){
       el.textContent = '\u2014';
+      return;
+    }
+    if(state.rampMode === 'locked'){
+      el.textContent = state.fixedNoteCount;
       return;
     }
     var required = requiredStreakForCurrentLevel();
@@ -1206,6 +1218,15 @@
     });
     document.getElementById('streakConfig').classList.toggle('open', mode === 'streak');
     document.getElementById('fixedConfig').classList.toggle('open', mode === 'fixed');
+    document.getElementById('lockedConfig').classList.toggle('open', mode === 'locked');
+    updatePhraseStatDisplay();
+    saveState();
+  }
+
+  function setFixedNoteCount(n){
+    n = Math.max(1, Math.min(MAX_PHRASE_NOTES, n || state.fixedNoteCount));
+    state.fixedNoteCount = n;
+    document.getElementById('lockedInput').value = n;
     updatePhraseStatDisplay();
     saveState();
   }
@@ -1240,6 +1261,7 @@
     setRampMode(state.rampMode);
     setStreakPerLevel(state.streakPerLevel);
     document.getElementById('fixedInput').value = state.fixedThresholds.join(', ');
+    setFixedNoteCount(state.fixedNoteCount);
     updateStatsDisplay();
     nextRound();
 
@@ -1282,7 +1304,7 @@
     });
 
     document.querySelectorAll('.ramp-pill').forEach(function(pill){
-      pill.addEventListener('click', function(){ setRampMode(pill.getAttribute('data-mode')); });
+      pill.addEventListener('click', function(){ setRampMode(pill.getAttribute('data-mode')); nextRound(); });
     });
 
     var streakInput = document.getElementById('streakInput');
@@ -1290,6 +1312,9 @@
 
     var fixedInput = document.getElementById('fixedInput');
     fixedInput.addEventListener('change', function(){ setFixedThresholds(fixedInput.value); });
+
+    var lockedInput = document.getElementById('lockedInput');
+    lockedInput.addEventListener('change', function(){ setFixedNoteCount(parseInt(lockedInput.value, 10)); nextRound(); });
 
     function hearCurrentPhrase(){
       if(!state.phrase) return;
