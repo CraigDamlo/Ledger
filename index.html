@@ -164,6 +164,63 @@
   .switch.on{ background:#2f4a3a; border-color: var(--brass); }
   .switch.on::after{ transform: translateX(18px); background: var(--brass-soft); }
 
+  .ramp-options{
+    overflow: hidden;
+    max-height: 0;
+    transition: max-height .3s ease;
+  }
+  .ramp-options.open{ max-height: 300px; }
+  .ramp-pills{
+    display:grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    padding-top: 10px;
+    padding-bottom: 4px;
+  }
+  .ramp-pill{
+    background: #16221c;
+    border: 1px solid #324339;
+    color: var(--text-hi);
+    border-radius: 10px;
+    padding: 9px 10px;
+    font-size: 12.5px;
+    text-align: left;
+    cursor: pointer;
+    line-height: 1.3;
+  }
+  .ramp-pill span{ display:block; color: var(--text-lo2); font-size: 10.5px; margin-top: 2px; }
+  .ramp-pill.active{
+    border-color: var(--brass);
+    background: linear-gradient(180deg, #233527, #1a281f);
+    box-shadow: 0 0 0 1px rgba(201,162,39,.25) inset;
+  }
+  .ramp-pill:focus-visible{ outline: 2px solid var(--brass-soft); outline-offset: 2px; }
+
+  .ramp-config{
+    overflow: hidden;
+    max-height: 0;
+    transition: max-height .25s ease;
+  }
+  .ramp-config.open{ max-height: 120px; padding-top: 6px; padding-bottom: 4px; }
+  .ramp-config label{
+    display:block;
+    font-size: 11.5px;
+    color: var(--text-lo2);
+    margin-bottom: 6px;
+  }
+  .ramp-config input[type="number"], .ramp-config input[type="text"]{
+    width: 100%;
+    background: #16221c;
+    border: 1px solid #324339;
+    color: var(--text-hi);
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  .ramp-config input:focus-visible{ outline: 2px solid var(--brass-soft); outline-offset: 1px; }
+  .ramp-config small{ display:block; color: var(--text-lo2); font-size: 10.5px; margin-top: 5px; }
+
   .reset-btn{
     margin-top: 14px;
     width: 100%;
@@ -190,12 +247,13 @@
 
   .stats-row{
     display:flex;
-    gap: 22px;
+    gap: 16px;
     font-family: var(--mono);
   }
   .stat{ text-align:center; }
-  .stat .v{ font-size: 20px; font-weight: 600; color: var(--brass-soft); }
+  .stat .v{ font-size: 20px; font-weight: 600; color: var(--brass-soft); white-space:nowrap; }
   .stat .l{ font-size: 9.5px; letter-spacing:.12em; text-transform:uppercase; color: var(--text-lo); margin-top:1px; }
+  #statPhrase{ font-size: 15px; }
 
   .staff-card{
     background: var(--paper);
@@ -409,6 +467,32 @@
 
     <div class="toggle-row">
       <div>
+        <p>Progressive phrases</p>
+        <small>Ramps up from 1 note to short phrases as you get answers right.</small>
+      </div>
+      <div class="switch" id="progressiveSwitch" role="switch" aria-checked="true" tabindex="0"></div>
+    </div>
+
+    <div class="ramp-options" id="rampOptions">
+      <div class="ramp-pills">
+        <button class="ramp-pill" data-mode="streak">Streak-based<span>Every N in a row bumps it up</span></button>
+        <button class="ramp-pill" data-mode="fixed">Fixed thresholds<span>Set your own per-level counts</span></button>
+      </div>
+
+      <div class="ramp-config" id="streakConfig">
+        <label for="streakInput">Correct in a row per step</label>
+        <input type="number" id="streakInput" min="2" max="15" step="1" value="5">
+      </div>
+
+      <div class="ramp-config" id="fixedConfig">
+        <label for="fixedInput">Correct in a row needed per step, comma-separated</label>
+        <input type="text" id="fixedInput" placeholder="3, 5, 8, 10">
+        <small>1st number = notes needed to go 1→2 notes, 2nd = 2→3, and so on.</small>
+      </div>
+    </div>
+
+    <div class="toggle-row">
+      <div>
         <p>Sound</p>
         <small>Plays the actual pitch of the key you tap.</small>
       </div>
@@ -448,9 +532,10 @@
     <div class="stat"><div class="v" id="statStreak">0</div><div class="l">Streak</div></div>
     <div class="stat"><div class="v" id="statBest">0</div><div class="l">Best</div></div>
     <div class="stat"><div class="v" id="statAcc">—</div><div class="l">Accuracy</div></div>
+    <div class="stat"><div class="v" id="statPhrase">1</div><div class="l">Notes</div></div>
   </div>
 
-  <div class="staff-card" id="staffCard" role="button" tabindex="0" aria-label="Tap to hear this note played">
+  <div class="staff-card" id="staffCard" role="button" tabindex="0" aria-label="Tap to hear this played">
     <p class="clef-tag">
       <span id="clefTag">treble clef</span>
       <span class="tap-hint">
@@ -596,13 +681,24 @@
   }
 
   // ---------- state ----------
+  var MAX_PHRASE_NOTES = 5;
+  var DEFAULT_FIXED_THRESHOLDS = [3, 5, 8, 10];
+
   var state = {
     levelId: 'treble-staff',
     showLabels: true,
     includeAccidentals: true,
     soundOn: true,
     playOnAppear: false,
-    current: null,        // { clef, step, accidental }
+    progressiveEnabled: true,
+    rampMode: 'streak',            // 'streak' | 'fixed'
+    streakPerLevel: 5,             // used when rampMode === 'streak'
+    fixedThresholds: DEFAULT_FIXED_THRESHOLDS.slice(), // used when rampMode === 'fixed'
+    phraseNoteCount: 1,            // current number of notes shown per round
+    phraseStreak: 0,               // consecutive correct rounds at phraseNoteCount
+    phrase: null,                  // { clef, notes: [{step, accidental}, ...] }
+    phraseAnswerIndex: 0,
+    phraseResults: [],
     awaitingAnswer: true,
     stats: { streak:0, best:0, correct:0, total:0 }
   };
@@ -615,6 +711,12 @@
       if(typeof saved.includeAccidentals === 'boolean') state.includeAccidentals = saved.includeAccidentals;
       if(typeof saved.soundOn === 'boolean') state.soundOn = saved.soundOn;
       if(typeof saved.playOnAppear === 'boolean') state.playOnAppear = saved.playOnAppear;
+      if(typeof saved.progressiveEnabled === 'boolean') state.progressiveEnabled = saved.progressiveEnabled;
+      if(saved.rampMode === 'streak' || saved.rampMode === 'fixed') state.rampMode = saved.rampMode;
+      if(typeof saved.streakPerLevel === 'number' && saved.streakPerLevel >= 2) state.streakPerLevel = saved.streakPerLevel;
+      if(Array.isArray(saved.fixedThresholds) && saved.fixedThresholds.length) state.fixedThresholds = saved.fixedThresholds;
+      if(typeof saved.phraseNoteCount === 'number') state.phraseNoteCount = Math.max(1, Math.min(MAX_PHRASE_NOTES, saved.phraseNoteCount));
+      if(typeof saved.phraseStreak === 'number') state.phraseStreak = saved.phraseStreak;
       if(saved.stats) state.stats = saved.stats;
     }catch(e){}
   }
@@ -623,7 +725,10 @@
       localStorage.setItem('ledger-state', JSON.stringify({
         levelId: state.levelId, showLabels: state.showLabels,
         includeAccidentals: state.includeAccidentals, soundOn: state.soundOn,
-        playOnAppear: state.playOnAppear, stats: state.stats
+        playOnAppear: state.playOnAppear, progressiveEnabled: state.progressiveEnabled,
+        rampMode: state.rampMode, streakPerLevel: state.streakPerLevel,
+        fixedThresholds: state.fixedThresholds, phraseNoteCount: state.phraseNoteCount,
+        phraseStreak: state.phraseStreak, stats: state.stats
       }));
     }catch(e){}
   }
@@ -635,26 +740,33 @@
 
   function randInt(min, max){ return Math.floor(Math.random() * (max - min + 1)) + min; }
 
-  function generateNote(){
-    var level = currentLevel();
-    var kbRange = rangeForLevel(level);
-    var clef, step, tries = 0;
+  function generateSingleNoteForClef(clef, kbRange, prevNote, tries){
+    tries = tries || 0;
+    var step, t = 0;
     do{
-      clef = level.clefs[randInt(0, level.clefs.length - 1)];
-      var diff = randInt(level.diffMin, level.diffMax);
+      var diff = randInt(currentLevel().diffMin, currentLevel().diffMax);
       step = CLEF[clef].bottomStep + diff;
-      tries++;
-    } while((step < kbRange.min || step > kbRange.max) && tries < 30);
+      t++;
+    } while((step < kbRange.min || step > kbRange.max) && t < 30);
     step = Math.max(kbRange.min, Math.min(kbRange.max, step));
 
     var accidental = pickAccidental(step, kbRange);
 
-    // avoid repeating the exact same note twice in a row when possible
-    if(state.current && state.current.step === step && state.current.clef === clef &&
-       state.current.accidental === accidental && tries < 25){
-      return generateNote();
+    if(prevNote && prevNote.step === step && prevNote.accidental === accidental && tries < 25){
+      return generateSingleNoteForClef(clef, kbRange, prevNote, tries + 1);
     }
-    return { clef: clef, step: step, accidental: accidental };
+    return { step: step, accidental: accidental };
+  }
+
+  function generatePhrase(noteCount){
+    var level = currentLevel();
+    var kbRange = rangeForLevel(level);
+    var clef = level.clefs[randInt(0, level.clefs.length - 1)];
+    var notes = [];
+    for(var i = 0; i < noteCount; i++){
+      notes.push(generateSingleNoteForClef(clef, kbRange, notes[i - 1]));
+    }
+    return { clef: clef, notes: notes };
   }
 
   function pickAccidental(step, range){
@@ -676,7 +788,6 @@
   var HALF_SPACE = 7;
   var STAFF_LEFT = 70;
   var STAFF_RIGHT = 300;
-  var NOTE_X = 215;
 
   function diffForStep(clef, step){ return step - CLEF[clef].bottomStep; }
 
@@ -694,6 +805,29 @@
 
   function yForDiff(diff){ return BOTTOM_LINE_Y - diff * HALF_SPACE; }
 
+  var NOTE_AREA_LEFT = 138, NOTE_AREA_RIGHT = 296, NOTE_X_SINGLE = 215;
+
+  function noteXPositions(count){
+    if(count <= 1) return [NOTE_X_SINGLE];
+    var xs = [];
+    for(var i = 0; i < count; i++){
+      xs.push(NOTE_AREA_LEFT + i * (NOTE_AREA_RIGHT - NOTE_AREA_LEFT) / (count - 1));
+    }
+    return xs;
+  }
+
+  function ledgerHalfWidthFor(count){
+    if(count <= 2) return 15;
+    if(count === 3) return 13;
+    return 11;
+  }
+
+  function accidentalOffsetFor(count){
+    if(count <= 2) return 26;
+    if(count === 3) return 20;
+    return 16;
+  }
+
   var svgNS = "http://www.w3.org/2000/svg";
   function svgEl(tag, attrs){
     var el = document.createElementNS(svgNS, tag);
@@ -701,7 +835,7 @@
     return el;
   }
 
-  function renderStaff(note){
+  function renderPhrase(phrase, currentIndex, results, animate){
     var svg = document.getElementById('staffSvg');
     svg.innerHTML = '';
 
@@ -712,7 +846,7 @@
     }
 
     // clef glyph
-    var clefInfo = CLEF[note.clef];
+    var clefInfo = CLEF[phrase.clef];
     var clefText = svgEl('text', {
       x: clefInfo.glyphX, y: clefInfo.glyphY, 'font-size': clefInfo.glyphSize,
       'font-family':'var(--clef-font)', fill:'var(--ink)'
@@ -720,37 +854,52 @@
     clefText.textContent = clefInfo.glyph;
     svg.appendChild(clefText);
 
-    document.getElementById('clefTag').textContent = note.clef + ' clef';
+    document.getElementById('clefTag').textContent = phrase.clef + ' clef';
 
-    // note group
-    var diff = diffForStep(note.clef, note.step);
-    var y = yForDiff(diff);
-    var group = svgEl('g', { class:'note-group' });
+    var count = phrase.notes.length;
+    var xs = noteXPositions(count);
+    var ledgerHalf = ledgerHalfWidthFor(count);
+    var accOffset = accidentalOffsetFor(count);
 
-    ledgerDiffs(diff).forEach(function(d){
-      var ly = yForDiff(d);
-      group.appendChild(svgEl('line', {
-        x1: NOTE_X - 15, y1: ly, x2: NOTE_X + 15, y2: ly,
-        stroke:'var(--ink)', 'stroke-width':1.4
-      }));
-    });
+    phrase.notes.forEach(function(note, idx){
+      var diff = diffForStep(phrase.clef, note.step);
+      var y = yForDiff(diff);
+      var x = xs[idx];
+      var result = results[idx];
+      var color = result === true ? 'var(--correct)' : (result === false ? 'var(--wrong)' : 'var(--ink)');
 
-    var head = svgEl('ellipse', {
-      cx: NOTE_X, cy: y, rx: 9, ry: 6.6,
-      fill:'var(--ink)', transform: 'rotate(-18 ' + NOTE_X + ' ' + y + ')'
-    });
-    group.appendChild(head);
+      var group = svgEl('g', { class: animate ? 'note-group' : 'note-group-static' });
 
-    if(note.accidental){
-      var sign = svgEl('text', {
-        x: NOTE_X - 26, y: y + 6, 'font-size': 22, 'font-family':'var(--body)',
-        fill:'var(--ink)', 'text-anchor':'middle'
+      if(idx === currentIndex && result == null && count > 1){
+        var ring = svgEl('circle', { cx:x, cy:y, r:13, fill:'none', stroke:'var(--brass)', 'stroke-width':2, opacity:0.6 });
+        group.appendChild(ring);
+      }
+
+      ledgerDiffs(diff).forEach(function(d){
+        var ly = yForDiff(d);
+        group.appendChild(svgEl('line', {
+          x1: x - ledgerHalf, y1: ly, x2: x + ledgerHalf, y2: ly,
+          stroke: color, 'stroke-width':1.4
+        }));
       });
-      sign.textContent = note.accidental === '#' ? '\u266F' : '\u266D';
-      group.appendChild(sign);
-    }
 
-    svg.appendChild(group);
+      var head = svgEl('ellipse', {
+        cx: x, cy: y, rx: 9, ry: 6.6,
+        fill: color, transform: 'rotate(-18 ' + x + ' ' + y + ')'
+      });
+      group.appendChild(head);
+
+      if(note.accidental){
+        var sign = svgEl('text', {
+          x: x - accOffset, y: y + 6, 'font-size': 22, 'font-family':'var(--body)',
+          fill: color, 'text-anchor':'middle'
+        });
+        sign.textContent = note.accidental === '#' ? '\u266F' : '\u266D';
+        group.appendChild(sign);
+      }
+
+      svg.appendChild(group);
+    });
   }
 
   // ---------- keyboard rendering ----------
@@ -833,17 +982,58 @@
     return midiForPlayed(target, !!note.accidental);
   }
 
+  function playPhraseSequence(notes, startDelay){
+    if(!state.soundOn) return;
+    var GAP = 350;
+    notes.forEach(function(note, i){
+      setTimeout(function(){ playPitch(midiForNote(note)); }, startDelay + i * GAP);
+    });
+  }
+
+  function activeNoteCount(){
+    return state.progressiveEnabled ? state.phraseNoteCount : 1;
+  }
+
+  function requiredStreakForCurrentLevel(){
+    if(state.rampMode === 'fixed'){
+      var idx = state.phraseNoteCount - 1; // thresholds[0] = notes 1->2, etc.
+      var list = state.fixedThresholds.length ? state.fixedThresholds : DEFAULT_FIXED_THRESHOLDS;
+      return list[idx] || list[list.length - 1];
+    }
+    return state.streakPerLevel;
+  }
+
+  function updatePhraseProgress(allCorrect){
+    if(!state.progressiveEnabled) return;
+    if(allCorrect){
+      state.phraseStreak++;
+      if(state.phraseNoteCount < MAX_PHRASE_NOTES && state.phraseStreak >= requiredStreakForCurrentLevel()){
+        state.phraseNoteCount++;
+        state.phraseStreak = 0;
+      }
+    } else {
+      state.phraseNoteCount = Math.max(1, state.phraseNoteCount - 1);
+      state.phraseStreak = 0;
+    }
+  }
+
   // ---------- game flow ----------
   function nextRound(){
     clearKeyFlashes();
-    state.current = generateNote();
+    var count = Math.max(1, Math.min(MAX_PHRASE_NOTES, activeNoteCount()));
+    state.phrase = generatePhrase(count);
+    state.phraseAnswerIndex = 0;
+    state.phraseResults = new Array(count).fill(null);
     state.awaitingAnswer = true;
-    renderStaff(state.current);
+    renderPhrase(state.phrase, state.phraseAnswerIndex, state.phraseResults, true);
+    updatePhraseStatDisplay();
+
     var fb = document.getElementById('feedback');
-    fb.textContent = 'Tap the key that matches the note.';
+    fb.textContent = count > 1 ? 'Play the phrase, left to right.' : 'Tap the key that matches the note.';
     fb.className = 'feedback idle';
+
     if(state.playOnAppear){
-      setTimeout(function(){ playPitch(midiForNote(state.current)); }, 150);
+      playPhraseSequence(state.phrase.notes, 150);
     }
   }
 
@@ -854,43 +1044,92 @@
     document.getElementById('statAcc').textContent = acc;
   }
 
-  function handleAnswer(playedTarget, isBlack, keyEl){
-    if(!state.awaitingAnswer) return;
-    state.awaitingAnswer = false;
+  function updatePhraseStatDisplay(){
+    var el = document.getElementById('statPhrase');
+    if(!el) return;
+    if(!state.progressiveEnabled){
+      el.textContent = '\u2014';
+      return;
+    }
+    var required = requiredStreakForCurrentLevel();
+    if(state.phraseNoteCount >= MAX_PHRASE_NOTES){
+      el.textContent = state.phraseNoteCount;
+    } else {
+      el.textContent = state.phraseNoteCount + ' (' + state.phraseStreak + '/' + required + ')';
+    }
+  }
 
-    playPitch(midiForPlayed(playedTarget, isBlack));
-
-    var correctTarget = targetStepFor(state.current);
-    var correctIsBlack = !!state.current.accidental;
-    var correctLabel = noteName(state.current);
-    var fb = document.getElementById('feedback');
-
-    if(playedTarget === correctTarget && isBlack === correctIsBlack){
+  function recordTapStats(correct){
+    if(correct){
       state.stats.streak++;
       state.stats.best = Math.max(state.stats.best, state.stats.streak);
       state.stats.correct++;
-      state.stats.total++;
-      keyEl.classList.add('correct-flash');
-      fb.textContent = '\u2713 Correct \u2014 that was ' + correctLabel + '.';
-      fb.className = 'feedback correct';
     } else {
       state.stats.streak = 0;
-      state.stats.total++;
+    }
+    state.stats.total++;
+    updateStatsDisplay();
+  }
+
+  function handleAnswer(playedTarget, isBlack, keyEl){
+    if(!state.awaitingAnswer) return;
+
+    playPitch(midiForPlayed(playedTarget, isBlack));
+
+    var idx = state.phraseAnswerIndex;
+    var expected = state.phrase.notes[idx];
+    var expectedTarget = targetStepFor(expected);
+    var expectedIsBlack = !!expected.accidental;
+    var correct = (playedTarget === expectedTarget && isBlack === expectedIsBlack);
+    var expectedLabel = noteName(expected);
+    var fb = document.getElementById('feedback');
+
+    if(correct){
+      keyEl.classList.add('correct-flash');
+    } else {
       keyEl.classList.add('wrong-flash');
       var playedLabel = isBlack ? blackKeyName(playedTarget) : (stepToNote(playedTarget).letter + stepToNote(playedTarget).octave);
-      var correctSelector = correctIsBlack
-        ? '.black-key[data-target="' + correctTarget + '"]'
-        : '.white-key[data-step="' + correctTarget + '"]';
+      var correctSelector = expectedIsBlack
+        ? '.black-key[data-target="' + expectedTarget + '"]'
+        : '.white-key[data-step="' + expectedTarget + '"]';
       var correctKey = document.querySelector(correctSelector);
       if(correctKey) correctKey.classList.add('correct-flash');
-      fb.textContent = '\u2717 That was ' + correctLabel + ' \u2014 you played ' + playedLabel + '.';
-      fb.className = 'feedback wrong';
     }
 
-    updateStatsDisplay();
+    recordTapStats(correct);
+    state.phraseResults[idx] = correct;
+    state.phraseAnswerIndex++;
+
+    var count = state.phrase.notes.length;
+    var isLastNote = state.phraseAnswerIndex >= count;
+
+    renderPhrase(state.phrase, state.phraseAnswerIndex, state.phraseResults, false);
+
+    if(!isLastNote){
+      fb.textContent = (correct ? '\u2713 ' : '\u2717 ') + 'Note ' + state.phraseAnswerIndex + ' of ' + count +
+        (correct ? '' : ' \u2014 that was ' + expectedLabel + '.');
+      fb.className = 'feedback ' + (correct ? 'correct' : 'wrong');
+      saveState();
+      return; // stay awaiting, let them tap the next note right away
+    }
+
+    // phrase complete
+    state.awaitingAnswer = false;
+    var allCorrect = state.phraseResults.every(function(r){ return r === true; });
+    var correctCount = state.phraseResults.filter(function(r){ return r === true; }).length;
+
+    if(count === 1){
+      fb.textContent = allCorrect ? ('\u2713 Correct \u2014 that was ' + expectedLabel + '.') : ('\u2717 That was ' + expectedLabel + '.');
+    } else {
+      fb.textContent = allCorrect ? '\u2713 Phrase complete \u2014 nice reading!' : ('\u2717 ' + correctCount + '/' + count + ' correct \u2014 check the staff above.');
+    }
+    fb.className = 'feedback ' + (allCorrect ? 'correct' : 'wrong');
+
+    updatePhraseProgress(allCorrect);
+    updatePhraseStatDisplay();
     saveState();
-    var wasCorrect = (playedTarget === correctTarget && isBlack === correctIsBlack);
-    var delay = wasCorrect ? 1300 : 2800;
+
+    var delay = (allCorrect ? 1300 : 2800) + 150 * (count - 1);
     setTimeout(nextRound, delay);
   }
 
@@ -904,6 +1143,8 @@
       btn.innerHTML = level.label + '<span>' + level.sub + '</span>';
       btn.addEventListener('click', function(){
         state.levelId = level.id;
+        state.phraseNoteCount = 1;
+        state.phraseStreak = 0;
         saveState();
         Array.prototype.forEach.call(grid.children, function(c){ c.classList.remove('active'); });
         btn.classList.add('active');
@@ -948,6 +1189,45 @@
     saveState();
   }
 
+  function setProgressiveSwitch(on){
+    state.progressiveEnabled = on;
+    var sw = document.getElementById('progressiveSwitch');
+    sw.classList.toggle('on', on);
+    sw.setAttribute('aria-checked', on ? 'true' : 'false');
+    document.getElementById('rampOptions').classList.toggle('open', on);
+    updatePhraseStatDisplay();
+    saveState();
+  }
+
+  function setRampMode(mode){
+    state.rampMode = mode;
+    document.querySelectorAll('.ramp-pill').forEach(function(p){
+      p.classList.toggle('active', p.getAttribute('data-mode') === mode);
+    });
+    document.getElementById('streakConfig').classList.toggle('open', mode === 'streak');
+    document.getElementById('fixedConfig').classList.toggle('open', mode === 'fixed');
+    updatePhraseStatDisplay();
+    saveState();
+  }
+
+  function setStreakPerLevel(n){
+    n = Math.max(2, Math.min(15, n || state.streakPerLevel));
+    state.streakPerLevel = n;
+    document.getElementById('streakInput').value = n;
+    updatePhraseStatDisplay();
+    saveState();
+  }
+
+  function setFixedThresholds(text){
+    var parsed = text.split(',')
+      .map(function(s){ return parseInt(s.trim(), 10); })
+      .filter(function(n){ return !isNaN(n) && n > 0; });
+    if(!parsed.length) parsed = DEFAULT_FIXED_THRESHOLDS.slice();
+    state.fixedThresholds = parsed;
+    updatePhraseStatDisplay();
+    saveState();
+  }
+
   function init(){
     loadState();
     buildLevelGrid();
@@ -956,6 +1236,10 @@
     setAccidentalsSwitch(state.includeAccidentals);
     setSoundSwitch(state.soundOn);
     setPlayOnAppearSwitch(state.playOnAppear);
+    setProgressiveSwitch(state.progressiveEnabled);
+    setRampMode(state.rampMode);
+    setStreakPerLevel(state.streakPerLevel);
+    document.getElementById('fixedInput').value = state.fixedThresholds.join(', ');
     updateStatsDisplay();
     nextRound();
 
@@ -991,24 +1275,44 @@
       if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); setPlayOnAppearSwitch(!state.playOnAppear); }
     });
 
-    function hearCurrentNote(){
-      if(!state.current) return;
+    var progressiveSwitch = document.getElementById('progressiveSwitch');
+    progressiveSwitch.addEventListener('click', function(){ setProgressiveSwitch(!state.progressiveEnabled); nextRound(); });
+    progressiveSwitch.addEventListener('keydown', function(e){
+      if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); setProgressiveSwitch(!state.progressiveEnabled); nextRound(); }
+    });
+
+    document.querySelectorAll('.ramp-pill').forEach(function(pill){
+      pill.addEventListener('click', function(){ setRampMode(pill.getAttribute('data-mode')); });
+    });
+
+    var streakInput = document.getElementById('streakInput');
+    streakInput.addEventListener('change', function(){ setStreakPerLevel(parseInt(streakInput.value, 10)); });
+
+    var fixedInput = document.getElementById('fixedInput');
+    fixedInput.addEventListener('change', function(){ setFixedThresholds(fixedInput.value); });
+
+    function hearCurrentPhrase(){
+      if(!state.phrase) return;
       if(!state.soundOn){
         ensureAudioCtx(); // still allow user gesture to unlock audio for later
         return;
       }
-      playPitch(midiForNote(state.current));
+      playPhraseSequence(state.phrase.notes, 0);
     }
     var staffCard = document.getElementById('staffCard');
-    staffCard.addEventListener('click', hearCurrentNote);
+    staffCard.addEventListener('click', hearCurrentPhrase);
     staffCard.addEventListener('keydown', function(e){
-      if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); hearCurrentNote(); }
+      if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); hearCurrentPhrase(); }
     });
 
     document.getElementById('resetBtn').addEventListener('click', function(){
       state.stats = { streak:0, best:0, correct:0, total:0 };
+      state.phraseNoteCount = 1;
+      state.phraseStreak = 0;
       updateStatsDisplay();
+      updatePhraseStatDisplay();
       saveState();
+      nextRound();
     });
 
     document.getElementById('keyboard').addEventListener('click', function(e){
