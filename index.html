@@ -205,6 +205,16 @@
     padding: 6px 4px 14px;
     box-shadow: 0 18px 40px -16px rgba(0,0,0,.55), 0 0 0 1px rgba(0,0,0,.08);
     position: relative;
+    cursor: pointer;
+    transition: transform .12s ease, box-shadow .12s ease;
+  }
+  .staff-card:active{
+    transform: scale(0.99);
+    box-shadow: 0 10px 26px -14px rgba(0,0,0,.5), 0 0 0 1px rgba(0,0,0,.08);
+  }
+  .staff-card:focus-visible{
+    outline: 2px solid var(--brass-soft);
+    outline-offset: 3px;
   }
   .staff-card::before{
     content:'';
@@ -222,7 +232,18 @@
     text-transform: uppercase;
     color: #8a7a5c;
     padding: 8px 10px 0;
+    display:flex;
+    align-items:center;
+    justify-content: space-between;
   }
+  .tap-hint{
+    display:flex;
+    align-items:center;
+    gap: 4px;
+    color: #a3906a;
+    font-size: 10px;
+  }
+  .tap-hint svg{ width:13px; height:13px; }
   svg.staff{ width: 100%; height: auto; display:block; }
 
   .feedback{
@@ -388,6 +409,22 @@
 
     <div class="toggle-row">
       <div>
+        <p>Sound</p>
+        <small>Plays the actual pitch of the key you tap.</small>
+      </div>
+      <div class="switch" id="soundSwitch" role="switch" aria-checked="true" tabindex="0"></div>
+    </div>
+
+    <div class="toggle-row">
+      <div>
+        <p>Play note on appear</p>
+        <small>Hear the answer before you find it — handy for ear training, but makes reading the staff optional.</small>
+      </div>
+      <div class="switch" id="playOnAppearSwitch" role="switch" aria-checked="false" tabindex="0"></div>
+    </div>
+
+    <div class="toggle-row">
+      <div>
         <p>Sharps &amp; flats</p>
         <small>Mixes in accidentals — tap the matching black key.</small>
       </div>
@@ -413,9 +450,18 @@
     <div class="stat"><div class="v" id="statAcc">—</div><div class="l">Accuracy</div></div>
   </div>
 
-  <div class="staff-card">
-    <p class="clef-tag" id="clefTag">treble clef</p>
-    <svg class="staff" id="staffSvg" viewBox="0 0 320 170" xmlns="http://www.w3.org/2000/svg"></svg>
+  <div class="staff-card" id="staffCard" role="button" tabindex="0" aria-label="Tap to hear this note played">
+    <p class="clef-tag">
+      <span id="clefTag">treble clef</span>
+      <span class="tap-hint">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+          <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+        </svg>
+        tap to hear
+      </span>
+    </p>
+    <svg class="staff" id="staffSvg" viewBox="0 0 320 190" xmlns="http://www.w3.org/2000/svg"></svg>
   </div>
 
   <p class="feedback idle" id="feedback">Tap the key that matches the note.</p>
@@ -446,16 +492,16 @@
   }
 
   var CLEF = {
-    treble: { bottomStep: noteStep('E', 4), glyph: '\uD834\uDD1E', glyphY: 118, glyphX: 26, glyphSize: 92 },
-    bass:   { bottomStep: noteStep('G', 2), glyph: '\uD834\uDD22', glyphY: 100, glyphX: 24, glyphSize: 54 }
+    treble: { bottomStep: noteStep('E', 4), glyph: '\uD834\uDD1E', glyphY: 130, glyphX: 26, glyphSize: 92 },
+    bass:   { bottomStep: noteStep('G', 2), glyph: '\uD834\uDD22', glyphY: 112, glyphX: 24, glyphSize: 54 }
   };
 
   var LEVELS = [
     { id:'treble-staff',  label:'Treble', sub:'In the staff',     clefs:['treble'], diffMin:0,  diffMax:8  },
-    { id:'treble-ledger', label:'Treble', sub:'+ Ledger lines',   clefs:['treble'], diffMin:-4, diffMax:12 },
+    { id:'treble-ledger', label:'Treble', sub:'+ Ledger lines',   clefs:['treble'], diffMin:-6, diffMax:14 },
     { id:'bass-staff',    label:'Bass',   sub:'In the staff',     clefs:['bass'],   diffMin:0,  diffMax:8  },
-    { id:'bass-ledger',   label:'Bass',   sub:'+ Ledger lines',   clefs:['bass'],   diffMin:-4, diffMax:12 },
-    { id:'mixed',         label:'Both clefs', sub:'Full range',   clefs:['treble','bass'], diffMin:-4, diffMax:12 }
+    { id:'bass-ledger',   label:'Bass',   sub:'+ Ledger lines',   clefs:['bass'],   diffMin:-6, diffMax:14 },
+    { id:'mixed',         label:'Both clefs', sub:'Full range',   clefs:['treble','bass'], diffMin:-6, diffMax:14 }
   ];
 
   var KB_HARD_MIN = noteStep('C', 1); // absolute outer safety bound, never displayed in full
@@ -484,6 +530,58 @@
     return lo.letter + '\u266F / ' + hi.letter + '\u266D';
   }
 
+  // ---------- pitch + audio ----------
+  var LETTER_SEMITONE = { C:0, D:2, E:4, F:5, G:7, A:9, B:11 };
+
+  function naturalMidi(letter, octave){ return LETTER_SEMITONE[letter] + 12 * (octave + 1); } // C4 = 60
+  function freqForMidi(m){ return 440 * Math.pow(2, (m - 69) / 12); }
+
+  function midiForPlayed(target, isBlack){
+    var n = stepToNote(target);
+    var m = naturalMidi(n.letter, n.octave);
+    return isBlack ? m + 1 : m; // the black key after a white step is one semitone above it
+  }
+
+  var audioCtx = null;
+  function ensureAudioCtx(){
+    if(!audioCtx){
+      try{ audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }catch(e){ return null; }
+    }
+    if(audioCtx.state === 'suspended') audioCtx.resume();
+    return audioCtx;
+  }
+
+  function playPitch(midi){
+    if(!state.soundOn) return;
+    var ctx = ensureAudioCtx();
+    if(!ctx) return;
+    var freq = freqForMidi(midi);
+    var now = ctx.currentTime;
+
+    var gain = ctx.createGain();
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(0.32, now + 0.012);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.85);
+    gain.connect(ctx.destination);
+
+    var osc = ctx.createOscillator();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(freq, now);
+    osc.connect(gain);
+    osc.start(now);
+    osc.stop(now + 0.9);
+
+    var overtone = ctx.createOscillator();
+    var overtoneGain = ctx.createGain();
+    overtoneGain.gain.setValueAtTime(0.08, now);
+    overtoneGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.6);
+    overtone.type = 'sine';
+    overtone.frequency.setValueAtTime(freq * 2, now);
+    overtone.connect(overtoneGain).connect(ctx.destination);
+    overtone.start(now);
+    overtone.stop(now + 0.6);
+  }
+
   function rangeForLevel(level){
     var min = Infinity, max = -Infinity;
     level.clefs.forEach(function(clef){
@@ -502,6 +600,8 @@
     levelId: 'treble-staff',
     showLabels: true,
     includeAccidentals: true,
+    soundOn: true,
+    playOnAppear: false,
     current: null,        // { clef, step, accidental }
     awaitingAnswer: true,
     stats: { streak:0, best:0, correct:0, total:0 }
@@ -513,6 +613,8 @@
       if(saved.levelId) state.levelId = saved.levelId;
       if(typeof saved.showLabels === 'boolean') state.showLabels = saved.showLabels;
       if(typeof saved.includeAccidentals === 'boolean') state.includeAccidentals = saved.includeAccidentals;
+      if(typeof saved.soundOn === 'boolean') state.soundOn = saved.soundOn;
+      if(typeof saved.playOnAppear === 'boolean') state.playOnAppear = saved.playOnAppear;
       if(saved.stats) state.stats = saved.stats;
     }catch(e){}
   }
@@ -520,7 +622,8 @@
     try{
       localStorage.setItem('ledger-state', JSON.stringify({
         levelId: state.levelId, showLabels: state.showLabels,
-        includeAccidentals: state.includeAccidentals, stats: state.stats
+        includeAccidentals: state.includeAccidentals, soundOn: state.soundOn,
+        playOnAppear: state.playOnAppear, stats: state.stats
       }));
     }catch(e){}
   }
@@ -569,7 +672,7 @@
   }
 
   // ---------- staff rendering ----------
-  var BOTTOM_LINE_Y = 110;
+  var BOTTOM_LINE_Y = 122;
   var HALF_SPACE = 7;
   var STAFF_LEFT = 70;
   var STAFF_RIGHT = 300;
@@ -725,6 +828,11 @@
     keys.forEach(function(k){ k.classList.remove('correct-flash','wrong-flash'); });
   }
 
+  function midiForNote(note){
+    var target = targetStepFor(note);
+    return midiForPlayed(target, !!note.accidental);
+  }
+
   // ---------- game flow ----------
   function nextRound(){
     clearKeyFlashes();
@@ -734,6 +842,9 @@
     var fb = document.getElementById('feedback');
     fb.textContent = 'Tap the key that matches the note.';
     fb.className = 'feedback idle';
+    if(state.playOnAppear){
+      setTimeout(function(){ playPitch(midiForNote(state.current)); }, 150);
+    }
   }
 
   function updateStatsDisplay(){
@@ -746,6 +857,8 @@
   function handleAnswer(playedTarget, isBlack, keyEl){
     if(!state.awaitingAnswer) return;
     state.awaitingAnswer = false;
+
+    playPitch(midiForPlayed(playedTarget, isBlack));
 
     var correctTarget = targetStepFor(state.current);
     var correctIsBlack = !!state.current.accidental;
@@ -818,12 +931,31 @@
     saveState();
   }
 
+  function setSoundSwitch(on){
+    state.soundOn = on;
+    var sw = document.getElementById('soundSwitch');
+    sw.classList.toggle('on', on);
+    sw.setAttribute('aria-checked', on ? 'true' : 'false');
+    if(on) ensureAudioCtx();
+    saveState();
+  }
+
+  function setPlayOnAppearSwitch(on){
+    state.playOnAppear = on;
+    var sw = document.getElementById('playOnAppearSwitch');
+    sw.classList.toggle('on', on);
+    sw.setAttribute('aria-checked', on ? 'true' : 'false');
+    saveState();
+  }
+
   function init(){
     loadState();
     buildLevelGrid();
     rebuildKeyboardForLevel();
     setLabelsSwitch(state.showLabels);
     setAccidentalsSwitch(state.includeAccidentals);
+    setSoundSwitch(state.soundOn);
+    setPlayOnAppearSwitch(state.playOnAppear);
     updateStatsDisplay();
     nextRound();
 
@@ -845,6 +977,32 @@
     accidentalsSwitch.addEventListener('click', function(){ setAccidentalsSwitch(!state.includeAccidentals); nextRound(); });
     accidentalsSwitch.addEventListener('keydown', function(e){
       if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); setAccidentalsSwitch(!state.includeAccidentals); nextRound(); }
+    });
+
+    var soundSwitch = document.getElementById('soundSwitch');
+    soundSwitch.addEventListener('click', function(){ setSoundSwitch(!state.soundOn); });
+    soundSwitch.addEventListener('keydown', function(e){
+      if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); setSoundSwitch(!state.soundOn); }
+    });
+
+    var playOnAppearSwitch = document.getElementById('playOnAppearSwitch');
+    playOnAppearSwitch.addEventListener('click', function(){ setPlayOnAppearSwitch(!state.playOnAppear); });
+    playOnAppearSwitch.addEventListener('keydown', function(e){
+      if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); setPlayOnAppearSwitch(!state.playOnAppear); }
+    });
+
+    function hearCurrentNote(){
+      if(!state.current) return;
+      if(!state.soundOn){
+        ensureAudioCtx(); // still allow user gesture to unlock audio for later
+        return;
+      }
+      playPitch(midiForNote(state.current));
+    }
+    var staffCard = document.getElementById('staffCard');
+    staffCard.addEventListener('click', hearCurrentNote);
+    staffCard.addEventListener('keydown', function(e){
+      if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); hearCurrentNote(); }
     });
 
     document.getElementById('resetBtn').addEventListener('click', function(){
