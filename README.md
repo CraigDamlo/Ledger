@@ -1,14 +1,23 @@
 # Ledger
 
-A pocket sight-reading drill for piano. Read the note (or notes) on the staff, tap the matching key — no installs, no accounts, just one HTML file you can host yourself and pull up on your phone.
+A pocket practice tool for piano — two modes in one app. **Sight-reading**: read the note (or notes) on the staff, tap the matching key. **Ear training**: hear the pitch, find it by ear, and watch it reveal on the staff once you answer. No installs, no accounts, just one HTML file you can host yourself and pull up on your phone.
 
-**[Live demo →](https://yourusername.github.io/ledger-sight-reading/)** *(update this link once it's deployed)*
+**[Live demo →](https://craigdamlo.github.io/Ledger/)** *(update this link once it's deployed)*
 
 ## What it does
 
-Shows notes on a treble or bass staff and waits for you to tap the matching key (or keys, in order) on an on-screen piano. Tracks your accuracy and streak, gives instant feedback, and can play back pitches so you connect what you're reading to what it sounds like. Everything is saved locally in your browser between visits — no account, no server.
+Shows notes on a treble or bass staff and waits for you to tap the matching key (or keys, in order) on an on-screen piano — or, in ear training mode, hides the notes and plays them instead, revealing each one as you find it. Tracks your accuracy and streak, gives instant feedback, and can play back pitches so you connect what you're reading to what it sounds like. Everything is saved locally in your browser between visits — no account, no server.
 
 No frameworks, no build step, no backend. It's a single `index.html` file with inline CSS/JS, plus two Google Fonts loaded from a CDN.
+
+## Modes
+
+A small switch sits right next to the "Ledger" title at the top of the screen, with a label above it that always tells you which mode you're in:
+
+- **Sight-reading drill** (default) — the note(s) are visible on the staff from the start; you read and tap.
+- **Ear training drill** — the staff starts blank. The pitch (or short melody, for phrases) plays automatically, and you have to find it by ear. Each note reveals on the staff — colored green or red — the moment you answer it. You can tap the staff card at any time to replay what you're working on.
+
+Flipping this switch requires Sound to be on (it'll turn Sound on for you automatically if it was off) — the mode is meaningless without audio. If you turn Sound off while in ear training mode, it'll drop you back into sight-reading automatically.
 
 ## All the settings, explained
 
@@ -42,10 +51,12 @@ Phrases cap out at 5 notes. The "Notes" stat (in the stats row above the staff) 
 Mixes accidentals into about a third of notes when on. The black keys become real, tappable targets (labeled with both spellings, e.g. "C♯ / D♭") when this is active. Turn it off to drill naturals only.
 
 ### Sound
-Plays the actual pitch of whatever key you tap, using the Web Audio API — no audio files, just synthesized tones. On by default; useful for connecting what you're reading to what it should sound like.
+Plays the actual pitch of whatever key you tap, using the Web Audio API — no audio files, just synthesized tones. On by default; useful for connecting what you're reading to what it should sound like. Required for ear training mode (see above).
 
 ### Play note on appear
-When on, automatically plays the pitch (or, for phrases, the whole short melody in sequence) as soon as a new note/phrase appears — before you've answered. **Off by default** on purpose: hearing the answer up front lets you match by ear instead of actually reading the staff, which works against the point of a sight-reading drill. Turn it on if you specifically want combined ear-training.
+When on, automatically plays the pitch (or, for phrases, the whole short melody in sequence) as soon as a new note/phrase appears — before you've answered. **Off by default** on purpose: in sight-reading mode, hearing the answer up front lets you match by ear instead of actually reading the staff.
+
+This setting disappears from the list while Ear training mode is on, since that mode already auto-plays every round by design — the two would be redundant.
 
 Independent of this, you can always tap the staff card itself to hear the current note/phrase played on demand, any number of times — that's not gated by this setting.
 

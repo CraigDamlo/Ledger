@@ -55,6 +55,11 @@
     justify-content: space-between;
     gap: 12px;
   }
+  .mode-row{
+    display:flex;
+    align-items:center;
+    gap: 8px;
+  }
   .brand .eyebrow{
     font-family: var(--mono);
     font-size: 11px;
@@ -145,6 +150,7 @@
   }
   .toggle-row p{ margin:0; font-size: 13px; color: var(--text-hi); }
   .toggle-row small{ display:block; color: var(--text-lo2); font-size: 11.5px; margin-top: 2px; }
+  .hidden{ display:none; }
   .switch{
     position: relative;
     width: 42px; height: 24px;
@@ -163,6 +169,10 @@
   }
   .switch.on{ background:#2f4a3a; border-color: var(--brass); }
   .switch.on::after{ transform: translateX(18px); background: var(--brass-soft); }
+
+  .switch-sm{ width: 30px; height: 18px; }
+  .switch-sm::after{ width: 14px; height: 14px; }
+  .switch-sm.on::after{ transform: translateX(12px); }
 
   .ramp-options{
     overflow: hidden;
@@ -449,7 +459,10 @@
 
 <header>
   <div class="brand">
-    <p class="eyebrow">Sight-reading drill</p>
+    <div class="mode-row">
+      <span class="eyebrow" id="modeLabel">Sight-reading drill</span>
+      <div class="switch switch-sm" id="headerEarSwitch" role="switch" aria-checked="false" tabindex="0" aria-label="Toggle ear training mode"></div>
+    </div>
     <h1>Ledger</h1>
   </div>
   <button class="gear-btn" id="gearBtn" aria-label="Settings" aria-expanded="false">
@@ -505,12 +518,14 @@
       <div class="switch" id="soundSwitch" role="switch" aria-checked="true" tabindex="0"></div>
     </div>
 
-    <div class="toggle-row">
-      <div>
-        <p>Play note on appear</p>
-        <small>Hear the answer before you find it — handy for ear training, but makes reading the staff optional.</small>
+    <div id="playOnAppearRow">
+      <div class="toggle-row">
+        <div>
+          <p>Play note on appear</p>
+          <small>Hear the answer before you find it. Useful if you're still learning the keyboard layout, but it does make reading the staff optional.</small>
+        </div>
+        <div class="switch" id="playOnAppearSwitch" role="switch" aria-checked="false" tabindex="0"></div>
       </div>
-      <div class="switch" id="playOnAppearSwitch" role="switch" aria-checked="false" tabindex="0"></div>
     </div>
 
     <div class="toggle-row">
@@ -696,6 +711,7 @@
     includeAccidentals: true,
     soundOn: true,
     playOnAppear: false,
+    earTrainingEnabled: false,
     progressiveEnabled: true,
     rampMode: 'streak',            // 'streak' | 'fixed' | 'locked'
     streakPerLevel: 5,             // used when rampMode === 'streak'
@@ -718,6 +734,7 @@
       if(typeof saved.includeAccidentals === 'boolean') state.includeAccidentals = saved.includeAccidentals;
       if(typeof saved.soundOn === 'boolean') state.soundOn = saved.soundOn;
       if(typeof saved.playOnAppear === 'boolean') state.playOnAppear = saved.playOnAppear;
+      if(typeof saved.earTrainingEnabled === 'boolean') state.earTrainingEnabled = saved.earTrainingEnabled;
       if(typeof saved.progressiveEnabled === 'boolean') state.progressiveEnabled = saved.progressiveEnabled;
       if(saved.rampMode === 'streak' || saved.rampMode === 'fixed' || saved.rampMode === 'locked') state.rampMode = saved.rampMode;
       if(typeof saved.streakPerLevel === 'number' && saved.streakPerLevel >= 2) state.streakPerLevel = saved.streakPerLevel;
@@ -726,6 +743,7 @@
       if(typeof saved.phraseNoteCount === 'number') state.phraseNoteCount = Math.max(1, Math.min(MAX_PHRASE_NOTES, saved.phraseNoteCount));
       if(typeof saved.phraseStreak === 'number') state.phraseStreak = saved.phraseStreak;
       if(saved.stats) state.stats = saved.stats;
+      if(!state.soundOn) state.earTrainingEnabled = false; // ear training is meaningless without sound
     }catch(e){}
   }
   function saveState(){
@@ -733,7 +751,8 @@
       localStorage.setItem('ledger-state', JSON.stringify({
         levelId: state.levelId, showLabels: state.showLabels,
         includeAccidentals: state.includeAccidentals, soundOn: state.soundOn,
-        playOnAppear: state.playOnAppear, progressiveEnabled: state.progressiveEnabled,
+        playOnAppear: state.playOnAppear, earTrainingEnabled: state.earTrainingEnabled,
+        progressiveEnabled: state.progressiveEnabled,
         rampMode: state.rampMode, streakPerLevel: state.streakPerLevel,
         fixedThresholds: state.fixedThresholds, fixedNoteCount: state.fixedNoteCount,
         phraseNoteCount: state.phraseNoteCount,
@@ -877,30 +896,33 @@
       var x = xs[idx];
       var result = results[idx];
       var color = result === true ? 'var(--correct)' : (result === false ? 'var(--wrong)' : 'var(--ink)');
+      var hidden = state.earTrainingEnabled && result == null;
 
       var group = svgEl('g', { class: animate ? 'note-group' : 'note-group-static' });
 
-      ledgerDiffs(diff).forEach(function(d){
-        var ly = yForDiff(d);
-        group.appendChild(svgEl('line', {
-          x1: x - ledgerHalf, y1: ly, x2: x + ledgerHalf, y2: ly,
-          stroke: color, 'stroke-width':1.4
-        }));
-      });
-
-      var head = svgEl('ellipse', {
-        cx: x, cy: y, rx: 9, ry: 6.6,
-        fill: color, transform: 'rotate(-18 ' + x + ' ' + y + ')'
-      });
-      group.appendChild(head);
-
-      if(note.accidental){
-        var sign = svgEl('text', {
-          x: x - accOffset, y: y + 6, 'font-size': 22, 'font-family':'var(--body)',
-          fill: color, 'text-anchor':'middle'
+      if(!hidden){
+        ledgerDiffs(diff).forEach(function(d){
+          var ly = yForDiff(d);
+          group.appendChild(svgEl('line', {
+            x1: x - ledgerHalf, y1: ly, x2: x + ledgerHalf, y2: ly,
+            stroke: color, 'stroke-width':1.4
+          }));
         });
-        sign.textContent = note.accidental === '#' ? '\u266F' : '\u266D';
-        group.appendChild(sign);
+
+        var head = svgEl('ellipse', {
+          cx: x, cy: y, rx: 9, ry: 6.6,
+          fill: color, transform: 'rotate(-18 ' + x + ' ' + y + ')'
+        });
+        group.appendChild(head);
+
+        if(note.accidental){
+          var sign = svgEl('text', {
+            x: x - accOffset, y: y + 6, 'font-size': 22, 'font-family':'var(--body)',
+            fill: color, 'text-anchor':'middle'
+          });
+          sign.textContent = note.accidental === '#' ? '\u266F' : '\u266D';
+          group.appendChild(sign);
+        }
       }
 
       svg.appendChild(group);
@@ -1037,10 +1059,16 @@
     updatePhraseStatDisplay();
 
     var fb = document.getElementById('feedback');
-    fb.textContent = count > 1 ? 'Play the phrase, left to right.' : 'Tap the key that matches the note.';
+    if(state.earTrainingEnabled){
+      fb.textContent = count > 1 ? 'Listen, then play it back \u2014 tap the keys in order.' : 'Listen, then tap the matching key.';
+    } else {
+      fb.textContent = count > 1 ? 'Play the phrase, left to right.' : 'Tap the key that matches the note.';
+    }
     fb.className = 'feedback idle';
 
-    if(state.playOnAppear){
+    if(state.earTrainingEnabled){
+      playPhraseSequence(state.phrase.notes, 150);
+    } else if(state.playOnAppear){
       playPhraseSequence(state.phrase.notes, 150);
     }
   }
@@ -1189,7 +1217,11 @@
     var sw = document.getElementById('soundSwitch');
     sw.classList.toggle('on', on);
     sw.setAttribute('aria-checked', on ? 'true' : 'false');
-    if(on) ensureAudioCtx();
+    if(on){
+      ensureAudioCtx();
+    } else if(state.earTrainingEnabled){
+      setEarTrainingSwitch(false); // ear training is meaningless with no sound
+    }
     saveState();
   }
 
@@ -1198,6 +1230,19 @@
     var sw = document.getElementById('playOnAppearSwitch');
     sw.classList.toggle('on', on);
     sw.setAttribute('aria-checked', on ? 'true' : 'false');
+    saveState();
+  }
+
+  function setEarTrainingSwitch(on){
+    if(on && !state.soundOn) setSoundSwitch(true); // ear training requires audio
+    state.earTrainingEnabled = on;
+    var sw = document.getElementById('headerEarSwitch');
+    sw.classList.toggle('on', on);
+    sw.setAttribute('aria-checked', on ? 'true' : 'false');
+    var label = document.getElementById('modeLabel');
+    if(label) label.textContent = on ? 'Ear training drill' : 'Sight-reading drill';
+    var poaRow = document.getElementById('playOnAppearRow');
+    if(poaRow) poaRow.classList.toggle('hidden', on);
     saveState();
   }
 
@@ -1256,6 +1301,7 @@
     setLabelsSwitch(state.showLabels);
     setAccidentalsSwitch(state.includeAccidentals);
     setSoundSwitch(state.soundOn);
+    setEarTrainingSwitch(state.earTrainingEnabled);
     setPlayOnAppearSwitch(state.playOnAppear);
     setProgressiveSwitch(state.progressiveEnabled);
     setRampMode(state.rampMode);
@@ -1286,15 +1332,21 @@
     });
 
     var soundSwitch = document.getElementById('soundSwitch');
-    soundSwitch.addEventListener('click', function(){ setSoundSwitch(!state.soundOn); });
+    soundSwitch.addEventListener('click', function(){ setSoundSwitch(!state.soundOn); nextRound(); });
     soundSwitch.addEventListener('keydown', function(e){
-      if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); setSoundSwitch(!state.soundOn); }
+      if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); setSoundSwitch(!state.soundOn); nextRound(); }
     });
 
     var playOnAppearSwitch = document.getElementById('playOnAppearSwitch');
     playOnAppearSwitch.addEventListener('click', function(){ setPlayOnAppearSwitch(!state.playOnAppear); });
     playOnAppearSwitch.addEventListener('keydown', function(e){
       if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); setPlayOnAppearSwitch(!state.playOnAppear); }
+    });
+
+    var headerEarSwitch = document.getElementById('headerEarSwitch');
+    headerEarSwitch.addEventListener('click', function(){ setEarTrainingSwitch(!state.earTrainingEnabled); nextRound(); });
+    headerEarSwitch.addEventListener('keydown', function(e){
+      if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); setEarTrainingSwitch(!state.earTrainingEnabled); nextRound(); }
     });
 
     var progressiveSwitch = document.getElementById('progressiveSwitch');
