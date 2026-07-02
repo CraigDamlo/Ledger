@@ -2,7 +2,7 @@
 
 A pocket sight-reading drill for piano. Read the note (or notes) on the staff, tap the matching key — no installs, no accounts, just one HTML file you can host yourself and pull up on your phone.
 
-**[Live demo →](https://yourusername.github.io/ledger-sight-reading/)** *(update this link once it's deployed)*
+**[Live demo →](https://craigdamlo.github.io/Ledger/)** *(update this link once it's deployed)*
 
 ## What it does
 
