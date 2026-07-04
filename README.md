@@ -86,4 +86,4 @@ Everything lives in `index.html`. A few starting points if you want to tweak it:
 
 ## License
 
-Do whatever you want with it — it's yours.
+Do whatever you want with it — it's yours. Have fun and possibly learn something.
